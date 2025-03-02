@@ -1,0 +1,80 @@
+---
+title: "Biostat 215 Project"
+author: "Cindy Pang, Jon Hori, Sophie Phillips"
+date: "2025-03-02"
+output: pdf_document
+---
+
+```{r}
+library(survival)
+library(dplyr)
+```
+
+```{r}
+dat <- (read.csv("../data/survProjData.csv") 
+        %>% dplyr::select(sample, id, race = race.demographic, 
+                          ethicity = ethnicity.demographic, 
+                          vital_status = vital_status.demographic,
+                          age_at_index = age_at_index.demographic, 
+                          days_to_birth = days_to_birth.demographic,
+                          year_of_birth = year_of_birth.demographic,
+                          days_to_death = days_to_death.demographic,
+                          year_of_death = year_of_death.demographic,
+                          figo_stage.diagnoses, days_to_last_follow_up.diagnoses,
+                          age_at_diagnosis = age_at_diagnosis.diagnoses, 
+                          age_at_diagnosis_years = age_at_earliest_diagnosis_in_years.diagnoses.xena_derived, 
+                          primary_diagnosis.diagnoses,
+                          shortest_dimension.samples, intermediate_dimension.samples,
+                          longest_dimension.samples,
+                          sample_type.samples))
+dat$age_at_index_days <- dat$age_at_index * 365
+dim(dat)
+```
+
+We have data on 609 female patients. Ovarian tissue samples were collected regularly and analyzed for cancer. All subjects in the data set were diagnosed with ovarian cancer, with the majority (600) having Serous cystadenocarcinoma. The data are left-truncated by age of enrollment. 75% of patients enrolled after age 50.
+```{r}
+summary(dat$age_at_index)
+```
+
+Diagnoses occurred between ages 26-90. 11 patients were missing dates of diagnosis but had time to death data. We removed these subjects from the time-to-diagnosis analysis as the data we missing, not censored. However, these subjects had time-to-death data available so they were included in the time-to-death analysis.
+```{r}
+summary(dat$age_at_diagnosis_years)
+```
+
+
+366 of the subjects died during the study. 
+```{r}
+summary(dat$days_to_death)
+```
+
+We will analyze both the time to diagnosis and time to death. The time to diagnosis is uncensored as all subjects were diagnosed within the study but the time to death is censored as only half the subjects died.
+
+
+```{r}
+fit <- survfit(Surv(age_at_index, age_at_diagnosis_years, obs) ~ 1, 
+                    data = dat %>% filter(!is.na(age_at_diagnosis))
+               %>% mutate(obs = 1))
+plot(fit, main = "Time to diagnosis")
+```
+
+```{r}
+fit <- survfit(Surv(age_at_index_days, age_at_index_days+days_to_death, obs) ~ 1, 
+                    data = dat %>% mutate(obs = vital_status == "Dead"))
+plot(fit, main = "Time to death", xlab = "days")
+```
+
+We will address the following questions:
+
+1. Does the time of cancer onset vary between different races? The majority (521) of subjects were white, so we may have limited power to detect differences. We will approach this question with a log-rank test to compare survival curves.
+```{r}
+table(dat$race)
+```
+2. Does the diagnosed FIGO stage predict the time to death? In theory, higher stage cancers should have shorter times to death. We will analyze this with a multi-group log rank test.
+
+3. We will use a Cox proportional hazards model to determine how the size of the collected tissue sample relates to the risk of death. 
+```{r}
+summary(dat$intermediate_dimension.samples)
+```
+
+
+
