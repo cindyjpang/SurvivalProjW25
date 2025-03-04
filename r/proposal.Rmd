@@ -32,13 +32,15 @@ dim(dat)
 ```
 
 We have data on 609 female patients. Ovarian tissue samples were collected regularly and analyzed for cancer. All subjects in the data set were diagnosed with ovarian cancer, with the majority (600) having Serous cystadenocarcinoma. The data are left-truncated by age of enrollment. 75% of patients enrolled after age 50.
-```{r}
-summary(dat$age_at_index)
-```
 
-Diagnoses occurred between ages 26-90. 11 patients were missing dates of diagnosis but had time to death data. We removed these subjects from the time-to-diagnosis analysis as the data we missing, not censored. However, these subjects had time-to-death data available so they were included in the time-to-death analysis.
 ```{r}
-summary(dat$age_at_diagnosis_years)
+boxplot(dat$age_at_index, dat$age_at_diagnosis_years, dat$age_at_index + (dat$days_to_death/365),
+        names = c("Age at enrollment", "Age at diagnosis", "Age at death"))
+```
+Diagnoses occurred between ages 26-90. Four subjects were missing both time-to-death data and time-to-diagnosis data. We removed these patients. Seven subjects were missing time-to diagnosis data but had time-to-death data. We included these subjects in the time-to-death analysis.
+```{r}
+dat <- dat %>% filter(!is.na(age_at_diagnosis) | !is.na(days_to_death))
+dim(dat)
 ```
 
 
@@ -47,14 +49,15 @@ summary(dat$age_at_diagnosis_years)
 summary(dat$days_to_death)
 ```
 
-We will analyze both the time to diagnosis and time to death. The time to diagnosis is uncensored as all subjects were diagnosed within the study but the time to death is censored as only half the subjects died.
+We will analyze both the time to diagnosis and time to death with a competing hazards method. The time to diagnosis is uncensored as all subjects were diagnosed within the study but the time to death is censored as only half the subjects died.
 
-
+It is not clear how we should handle the left truncation. The time between enrollment and diagnosis is small causing the Kaplan-Meier curve to fall to 0 immediately.
 ```{r}
-fit <- survfit(Surv(age_at_index, age_at_diagnosis_years, obs) ~ 1, 
-                    data = dat %>% filter(!is.na(age_at_diagnosis))
-               %>% mutate(obs = 1))
-plot(fit, main = "Time to diagnosis")
+hist(dat$age_at_diagnosis_years - dat$age_at_index, xlab = "Time between enrollment and diagnosis")
+
+# fit <- survfit(Surv(dat$age_at_index, dat$age_at_diagnosis_years, rep(1, nrow(dat))) ~ 1, 
+#                     data = dat)
+# plot(fit, main = "Time to diagnosis")
 ```
 
 ```{r}
