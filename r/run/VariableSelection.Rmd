@@ -1,0 +1,8 @@
+---
+title: "Variable Selection"
+author: "Cindy J. Pang"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+

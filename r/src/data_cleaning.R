@@ -1,7 +1,8 @@
 library(dplyr)
+library(tidyverse)
 
 #### data/cleaning
-dat <- (read.csv("data/survProjData.csv") 
+dat <- (read.csv("../data/survProjData.csv") 
         %>% dplyr::select(sample, id, 
                           race = race.demographic, 
                           ethicity = ethnicity.demographic, 
@@ -64,6 +65,13 @@ clean_dat <- dat %>% dplyr::select(sample,
                                    size.shortest, size.intermediate, size.longest,
                                    FIGO, race_cleaned, race_collapsed)
 
+
 summary(clean_dat)
 
+survData <- dat %>%
+  select(sample, days_to_death_censored, dead_indicator, size.intermediate, race_cleaned, race_collapsed, FIGO, age_at_diagnosis) %>%
+  drop_na()
+
+survData <- survData %>% rename(time = days_to_death_censored)
+survData <- survData %>% rename(delta = dead_indicator)
 
