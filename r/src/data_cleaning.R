@@ -1,3 +1,5 @@
+rm(list=ls())
+
 library(dplyr)
 library(tidyverse)
 
@@ -75,3 +77,5 @@ survData <- dat %>%
 survData <- survData %>% rename(time = days_to_death_censored)
 survData <- survData %>% rename(delta = dead_indicator)
 
+
+write.csv(survData,"../data/survDataCleaned.csv", row.names = FALSE)
