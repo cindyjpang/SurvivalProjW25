@@ -5,7 +5,7 @@ library(gtsummary)
 library(gt)
 
 mypal <- c("#1F77B4", "#FF7F0E", "#2CA02C", "#D62728")
-mypal2 <- c("#17BECF", "#BCBD22", "#FF6347", "#6A5ACD")
+mypal2 <- c("#17BECF", "#BCBD22", "#FF6347", "#6A5ACD", "darkred")
 
 data <- (read.csv("data/survDataCleaned.csv")
          %>% mutate(time_to_death_years = time / 365,
@@ -14,10 +14,11 @@ data <- (read.csv("data/survDataCleaned.csv")
 head(data)
 
 ###### Compare survival by FIGO stage
+par(mfrow=c(1,2))
 fit <- survfit(Surv(time/365, delta) ~ FIGO, data = data, conf.type = 'none')
-plot(fit, col = mypal, years = "Time (years)", ylab = "S(t)")
-legend("bottomleft", col = mypal, lty = 1, bty = "n", cex = 1.2,
-       legend = levels(data$FIGO))
+plot(fit, col = mypal, xlab = "Time (years)", ylab = "S(t)", cex.lab = 1.2)
+legend("bottomleft", col = mypal, lty = 1, lwd = 2, 
+       bty = "n", cex = 1.2, legend = levels(data$FIGO))
 
 logranks <- ten(Surv(time, delta) ~ FIGO, data = data)
 comp(logranks, p = c(1, 0), q = c(0, 1))
@@ -35,12 +36,11 @@ gt(tbl) %>% tab_style(
 
 
 
-
 ###### Compare survival by race
-fit <- survfit(Surv(time/365, delta) ~ race, data = data %>% filter(!grepl("unreported", race)), conf.type = 'none')
+fit <- survfit(Surv(time/365, delta) ~ race, data = data, conf.type = 'none')
 plot(fit, col = mypal2, xlab = "Time (years)", ylab = "S(t)", cex.lab = 1.2)
 legend("bottomleft", col = mypal2, lty = 1, lwd =2,  bty = "n", cex = 1.2,
-       legend = levels(data$race)[-4])
+       legend = levels(data$race))
 
 
 logranks <- ten(Surv(time, delta) ~ race, data = data %>% filter(!grepl("unreported", race)))
