@@ -5,4 +5,254 @@ date: "`r Sys.Date()`"
 output: pdf_document
 ---
 
+```{r, warnings = FALSE}
+rm(list=ls())
+library(dplyr)
+library(survival)
+library(survMisc)
+```
+
+```{r}
+data <- read.csv("../data/survDataCleaned.csv")
+```
+
+Which race variable should we use?  
+```{r}
+data.raceCleaned <- data %>% select(-race_collapsed) 
+data.raceCollapsed <- data %>% select(-race_cleaned)
+```
+
+# Variable Selection.  
+
+## Fit Cox-PH models for both the `data.raceCleaned` and `data.raceCollapsed`. 
+
+```{r}
+data.raceCleaned$race_cleaned <- relevel(factor(data.raceCleaned$race_cleaned), ref = "white")
+data.raceCleaned$FIGO <- relevel(factor(data.raceCleaned$FIGO), ref = "Stage I")
+
+fullCoxMod <- coxph(Surv(time, delta) ~ size.intermediate + factor(race_cleaned) + factor(FIGO)+age_at_diagnosis, data=data.raceCleaned, ties = "breslow")
+
+fullCoxMod
+```
+
+
+```{r}
+data.raceCollapsed$race_cleaned <- relevel(factor(data.raceCollapsed$race_collapsed), ref = "white")
+data.raceCollapsed$FIGO <- relevel(factor(data.raceCollapsed$FIGO), ref = "Stage I")
+
+fullCoxMod.r <- coxph(Surv(time, delta) ~ size.intermediate + factor(race_cleaned) + factor(FIGO)+age_at_diagnosis, data=data.raceCollapsed, ties = "breslow")
+
+fullCoxMod.r
+```
+Above is proof that collapsing the race category doesn't improve or make inference any better. I will use the `data.raceCleaned` variable going forward.  
+
+## Stepwise AIC Selection.  
+
+```{r, warning = FALSE}
+# import package
+library(MASS)
+```
+
+```{r}
+CoxPH.aic <- stepAIC(fullCoxMod, direction="both", 
+                          k=2, trace=1)
+# Display the best model obtained by AIC
+CoxPH.aic
+```
+Ok, AIC stepwise selection only selected `race_cleaned`, `FIGO` and `age_at_diagnosis`.  
+
+## Stepwise BIC Selection.  
+
+```{r}
+n <- nrow(data.raceCleaned) # number of rows
+CoxPH.bic <- stepAIC(fullCoxMod, direction="both", 
+                          k=log(n), trace=1)
+CoxPH.bic
+```
+BIC selected `FIGO` and `age_at_diagonosis` to obtain the best model.  
+
+## AFT Models.  
+
+### Exponential AFT.  
+
+```{r}
+full.expAFT <- survreg(Surv(time, delta) ~ size.intermediate + factor(race_cleaned) + 
+    factor(FIGO) + age_at_diagnosis, data = data.raceCleaned, dist = "exponential")
+
+expAFT.aic <- stepAIC(full.expAFT, direction = "both", k=2, trace=1)
+
+expAFT.aic
+
+expAFT.bic <- stepAIC(full.expAFT, direction = "both", k=log(n), trace=1)
+
+expAFT.bic
+```
+
+### Weibull AFT  
+
+```{r}
+full.weibullAFT <- survreg(Surv(time, delta) ~ size.intermediate + factor(race_cleaned) + 
+    factor(FIGO) + age_at_diagnosis, data = data.raceCleaned, dist = "weibull")
+
+weibullAFT.aic <- stepAIC(full.weibullAFT, direction = "both", k=2, trace=1)
+
+weibullAFT.aic
+
+weibullAFT.bic <- stepAIC(full.weibullAFT, direction = "both", k=log(n), trace=1)
+
+weibullAFT.bic
+```
+
+### Log-Logistic AFT.  
+
+```{r}
+full.loglogisticAFT <- survreg(Surv(time, delta) ~ size.intermediate + factor(race_cleaned) + 
+    factor(FIGO) + age_at_diagnosis, data = data.raceCleaned, dist = "loglogistic")
+
+loglogisticAFT.aic <- stepAIC(full.loglogisticAFT, direction = "both", k=2, trace=1)
+
+loglogisticAFT.aic
+
+loglogisticAFT.bic <- stepAIC(full.loglogisticAFT, direction = "both", k=log(n), trace=1)
+
+loglogisticAFT.bic
+```
+
+## Log-Normal AFT  
+```{r}
+full.lognormalAFT <- survreg(Surv(time, delta) ~ size.intermediate + factor(race_cleaned) + 
+    factor(FIGO) + age_at_diagnosis, data = data.raceCleaned, dist = "lognormal")
+
+lognormalAFT.aic <- stepAIC(full.lognormalAFT, direction = "both", k=2, trace=1)
+
+lognormalAFT.aic
+
+lognormalAFT.bic <- stepAIC(full.lognormalAFT, direction = "both", k=log(n), trace=1)
+
+lognormalAFT.bic
+```
+
+
+## Conclusions.  
+
+For both the AIC and BIC Stepwise selection models, `FIGO` and `age_at_diagnosis` were selected. In both models, the Biopsy size variable `size.intermediate` was not considered significant. Going forward, it would be prudent to **use the BIC chosen model** since there is a larger penalty which adjusts for the large sample size (n=598).  
+
+# Model Diagnostics. 
+
+## Cox-Snell Residual Plot.  
+
+```{r}
+plotCoxSnellCPH<- function(survFit, delta, fitType){
+  
+  # get Cox-Snell Residual based on Martingale Residuals
+  mg.residual <- resid(survFit, type = "martingale")
+  
+  cs.residual <- delta - mg.residual
+
+  # Graphical Plot 
+  fit.cs <- survfit(Surv(cs.residual, delta) ~ 1) # get KM estimates
+  H.cs <- cumsum(fit.cs$n.event/fit.cs$n.risk)
+  
+  plot(fit.cs$time, H.cs, type='s', col='blue', 
+       main = paste0('Cox-PH - ', fitType), 
+       xlab = 'Residual', ylab = 'Nelson-Aalen Cum. Hazard') 
+  #Note here that 'time' is the value of the Cox-Snell residual
+  abline(0, 1, col='red',  lty = 2)
+}
+```
+
+```{r}
+plotCSExpAFT <- function(survFit, data, fitType){
+  sigma <- survFit$scale
+  eta   <- -survFit$linear.predictors/sigma
+  
+  r.exp <- data$time * exp(eta)
+  
+  fit   <- survfit(Surv(r.exp, data$delta) ~ 1)
+  H.exp <- cumsum(fit$n.event / fit$n.risk)
+  
+  plot(H.exp ~ fit$time, type = 'l', main = paste0('Exponential AFT - ', fitType),
+       ylab = 'Estimated Cumulative Hazard', xlab = 'Cox-Snell Residual')
+  abline(0, 1, col='red',  lty=2)
+}
+```
+
+```{r}
+plotCSWeibullAFT <- function(survFit, data, fitType){
+  sigma  <- survFit$scale
+  alpha  <- 1 / sigma
+  eta    <- -survFit$linear.predictors / sigma
+  
+  r.wb <- data$time^alpha * exp(eta)
+  
+  fit   <- survfit(Surv(r.wb, data$delta) ~ 1)
+  H.wb  <- cumsum(fit$n.event/fit$n.risk)
+  
+  plot(H.wb ~ fit$time, type = 'l', main = paste0('Weibull AFT - ', fitType),
+       ylab = 'Estimated Cumulative Hazard', xlab = 'Cox-Snell Residual')
+  abline(0, 1, col='red',  lty=2)
+}
+```
+
+```{r}
+plotCSLogLogisticAFT <- function(survFit, data, fitType){
+  sigma  <- survFit$scale
+  alpha  <- 1 / sigma
+  eta    <- -survFit$linear.predictors / sigma
+  
+  r.ll  <- -log(1/(1 + data$time^alpha*exp(eta)))
+  
+  fit   <- survfit(Surv(r.ll, data$delta) ~ 1)
+  H.ll  <- cumsum(fit$n.event / fit$n.risk)
+  
+  plot(H.ll ~ fit$time, type = 'l', main = paste0('Log-Logistic AFT- ', fitType),
+       ylab = 'Estimated Cumulative Hazard', xlab = 'Cox-Snell Residual')
+  abline(0, 1, col='red',  lty=2)
+}
+```
+
+```{r}
+plotCSLogNormalAFT <- function(survFit, data, fitType){
+  eta    <- -survFit$linear.predictors / survFit$scale
+  r.ln   <- -log(1 - pnorm((log(data$time) - survFit$linear.predictors) / survFit$scale))
+  
+  fit   <- survfit(Surv(r.ln, data$delta) ~ 1)
+  H.ln  <- cumsum(fit$n.event/fit$n.risk)
+  
+  plot(H.ln ~ fit$time, type = 'l', main = paste0('Log-Normal AFT - ', fitType),
+       ylab = 'Estimated Cumulative Hazard', xlab = 'Cox-Snell Residual')
+  abline(0, 1, col='red',  lty = 2) 
+}
+```
+
+
+```{r}
+par(mfrow = c(1,3))
+plotCoxSnellCPH(CoxPH.aic, data.raceCleaned$delta, "AIC")
+plotCoxSnellCPH(CoxPH.bic, data.raceCleaned$delta, "BIC")
+plotCoxSnellCPH(fullCoxMod, data.raceCleaned$delta, "Full Variable")
+
+par(mfrow = c(1,3))
+plotCSExpAFT(expAFT.aic, data.raceCleaned, "AIC")
+plotCSExpAFT(expAFT.bic, data.raceCleaned, "BIC")
+plotCSExpAFT(full.expAFT, data.raceCleaned, "Full")
+
+par(mfrow = c(1,3))
+plotCSWeibullAFT(weibullAFT.aic, data.raceCleaned, "AIC")
+plotCSWeibullAFT(weibullAFT.bic, data.raceCleaned, "BIC")
+plotCSWeibullAFT(full.weibullAFT, data.raceCleaned, "Full")
+
+par(mfrow = c(1,3))
+plotCSLogLogisticAFT(loglogisticAFT.aic, data.raceCleaned, "AIC")
+plotCSLogLogisticAFT(loglogisticAFT.bic, data.raceCleaned, "BIC")
+plotCSLogLogisticAFT(full.loglogisticAFT, data.raceCleaned, "Full")
+
+par(mfrow = c(1,3))
+plotCSLogNormalAFT(lognormalAFT.aic, data.raceCleaned, "AIC")
+plotCSLogNormalAFT(lognormalAFT.bic, data.raceCleaned, "BIC")
+plotCSLogNormalAFT(full.lognormalAFT, data.raceCleaned, "Full")
+```
+
+
+
 
