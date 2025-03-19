@@ -22,7 +22,8 @@ factorVars <- c( "Race", "FIGO stage")
 
 table1 <- (data[,c(vars, "Vital status")] %>% tbl_summary(by = `Vital status`)
            %>% add_p()  # Add p-values
-           %>% modify_header(label = "**Variable**") %>% bold_labels() )
+           %>% modify_header(label = "**Variable**") %>% bold_labels() 
+           %>% add_overall())
 
 table1
 
