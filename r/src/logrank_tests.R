@@ -19,18 +19,21 @@ plot(fit, col = mypal, years = "Time (years)", ylab = "S(t)")
 legend("bottomleft", col = mypal, lty = 1, bty = "n", cex = 1.2,
        legend = levels(data$FIGO))
 
-logranks <- ten(Surv(time, delta) ~ FIGO, data = data) 
+logranks <- ten(Surv(time, delta) ~ FIGO, data = data)
 comp(logranks, p = c(1, 0), q = c(0, 1))
 tbl <- data.frame(attr(logranks, "tft")$tft)
 tbl <- tbl[,c(1,2,6,8)]
 colnames(tbl) <- c("Test", "Z(t)", "Chi-square", "p-value")
 tbl[,-1] <- round(tbl[,-1], 2)
-tbl$Test <- c("Log-rank", "Gehan", "Tarone-Ware", "Peto-Peto", 
-              "Modified PP","FH p=1,q=0", "FH p=0,q=1")
+tbl<- cbind(" " = c("Log-rank", "Gehan", "Tarone-Ware", "Peto-Peto", 
+                    "Modified PP","FH p=1,q=0", "FH p=0,q=1"), tbl[,-1])
 gt(tbl) %>% tab_style(
-  style = cell_text(weight = "bold"),  # Make column headers bold
-  locations = cells_column_labels()
-)
+  style = cell_text(weight = "bold"),  
+  locations = cells_column_labels()) %>% tab_style(
+    style = cell_text(weight = "bold"),  
+    locations = cells_body(columns = 1))
+
+
 
 
 ###### Compare survival by race
@@ -46,9 +49,12 @@ tbl <- data.frame(attr(logranks, "tft")$tft)
 tbl <- tbl[,c(1,2,6,8)]
 colnames(tbl) <- c("Test", "Z(t)", "Chi-square", "p-value")
 tbl[,-1] <- round(tbl[,-1], 2)
-tbl$Test <- c("Log-rank", "Gehan", "Tarone-Ware", "Peto-Peto", 
-              "Modified PP","FH p=1,q=0", "FH p=0,q=1")
+tbl<- cbind(" " = c("Log-rank", "Gehan", "Tarone-Ware", "Peto-Peto", 
+              "Modified PP","FH p=1,q=0", "FH p=0,q=1"), tbl[,-1])
 gt(tbl) %>% tab_style(
-  style = cell_text(weight = "bold"),  # Make column headers bold
-  locations = cells_column_labels()
-)
+  style = cell_text(weight = "bold"),  
+  locations = cells_column_labels()) %>% tab_style(
+  style = cell_text(weight = "bold"),  
+  locations = cells_body(columns = 1))
+
+
