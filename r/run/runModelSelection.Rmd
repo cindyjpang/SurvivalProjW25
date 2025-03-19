@@ -1,0 +1,46 @@
+---
+title: "Model Selection"
+author: "Cindy J. Pang"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+```{r}
+rm(list=ls())
+```
+
+```{r, results='hide', warnings = FALSE}
+source("../src/models.R")
+```
+
+# Cox-PH Models.  
+
+```{r}
+CoxPH.aic
+CoxPH.bic
+```
+
+# Exponential AFT Models. 
+
+```{r}
+expAFT.aic
+expAFT.bic
+```
+
+# Weibull AFT Models.  
+
+```{r}
+weibullAFT.aic
+weibullAFT.bic
+```
+
+# Log-Logistic AFT Models. 
+```{r}
+loglogisticAFT.aic
+loglogisticAFT.bic
+```
+
+# Log-Normal AFT Models. 
+```{r}
+lognormalAFT.aic
+lognormalAFT.bic
+```
