@@ -153,6 +153,11 @@ lines(log(fit2$hazard[fit2$strata == "Stage IV"]) ~ fit2$time[fit2$strata == "St
 legend("bottomright", lty = 1, lwd = 2, col = mypal, bty = "n",
        legend = levels(data$FIGO_collapsed))
 
+#### Race
+data$race_collapsed <- ifelse(data$race_cleaned %in% c("white", "black", "asian"), 
+                              as.character(data$race_cleaned), "unreported/other")
+data$race_collapsed <- relevel(factor(data$race_collapsed), ref = "white")
+
 
 ##### Age at diagnosis
 
@@ -196,16 +201,19 @@ newCoxMod <- coxph(Surv(time, delta) ~ size.intermediate + factor(race_collapsed
 cox.zph(newCoxMod)
 
 
-#################
+###################################################
 ### Corrected final model
 data$FIGO_collapsed <- ifelse(data$FIGO %in% c("Stage I", "Stage II"), "Stage I/II", 
                               ifelse(data$FIGO == "Stage III", "Stage III", "Stage IV"))
 data$FIGO_collapsed <- relevel(as.factor(data$FIGO_collapsed), ref = "Stage I/II")
 
-data$race_collapsed <- ifelse(data$race_cleaned %in% c("white", "black", "asian"), data$race_cleaned, "Unreported/other")
+data$race_collapsed <- ifelse(data$race_cleaned %in% c("white", "black", "asian"), 
+                              as.character(data$race_cleaned), "unreported/other")
+data$race_collapsed <- relevel(factor(data$race_collapsed), ref = "white")
 
 data2 <- survSplit(Surv(time, delta) ~ size.intermediate + factor(race_collapsed) + factor(FIGO_collapsed) + age_at_diagnosis,
                    data = data, cut = c(opt_tau), episode = "tgroup")
+data2$tgroup <- as.integer(data2$tgroup == 2)
 colnames(data2) <- gsub("factor", "", colnames(data2))
 colnames(data2) <- gsub("[()]", "", colnames(data2))
 
@@ -213,5 +221,74 @@ newCoxMod <- coxph(Surv(time, delta) ~ size.intermediate + factor(race_collapsed
                    + factor(FIGO_collapsed) + age_at_diagnosis +age_at_diagnosis:strata(tgroup),
                    data=data2, ties = "breslow") 
 summary(newCoxMod)
-
 cox.zph(newCoxMod)
+
+
+#### Corrected figures
+schoenfeld_test2 <- cox.zph(newCoxMod)
+summary(schoenfeld_test2$y)
+
+rt2 <- schoenfeld_test2$y[,5]
+ctime <- c(schoenfeld_test2$time, schoenfeld_test2$time[!is.na(rt2)])
+rs <- c(schoenfeld_test2$y[,4], rt2[!is.na(rt2)])
+
+par(mfrow=c(1,1))
+plot(rs ~ ctime, main = "Schoenfeld plot for age at diagnosis", xlim = c(0, 3000),
+     xlab = "Time", ylab = "Beta(t) for age at diagnosis")
+lowess_fit <- lowess(x=ctime, y=rs, f = 0.2)
+lines(lowess_fit, lwd = 2, col = "red")
+
+
+##### factor variables
+par(mfrow=c(1,2))
+newdata <- expand.grid(
+  size.intermediate = mean(data$size.intermediate, na.rm = TRUE),
+  race_collapsed = unique(data$race_collapsed),
+  FIGO_collapsed = "Stage IV",
+  age_at_diagnosis = mean(data$age_at_diagnosis, na.rm = TRUE),
+  tgroup = c(0,1)  )
+
+surv_fit <- survfit(newCoxMod, newdata = newdata)
+
+
+plot(surv_fit$time, rep(0, length(surv_fit$time)), t = "n",
+     ylim = c(-5, 0.5), xlab = "Time", ylab = "log H(t)",
+     main = "Log Cumulative Hazard, race")
+abline(v = opt_tau, lty = 2, lwd = 2)
+races <- unique(data$race_collapsed)
+for (i in 1:length(races)) {
+  race <- races[i]
+  surv_fit <- survfit(newCoxMod, newdata = newdata %>% filter(race_collapsed == race))
+  H_t <- -log(surv_fit$surv)
+  lines(log(H_t) ~ surv_fit$time, col = mypal2[i])
+}
+legend("bottomright", lty = 1, lwd = 2, col = mypal2, bty = "n",
+       legend = levels(data$race_collapsed))
+
+
+### FIGO
+newdata <- expand.grid(
+  size.intermediate = mean(data$size.intermediate, na.rm = TRUE),
+  race_collapsed = "white",
+  FIGO_collapsed = unique(data$FIGO_collapsed),
+  age_at_diagnosis = mean(data$age_at_diagnosis, na.rm = TRUE),
+  tgroup = c(0,1)  )
+
+surv_fit <- survfit(newCoxMod, newdata = newdata)
+
+plot(surv_fit$time, rep(0, length(surv_fit$time)), t = "n",
+     ylim = c(-5, 0.5), xlab = "Time", ylab = "log H(t)",
+     main = "Log Cumulative Hazard, FIGO stage")
+abline(v = opt_tau, lty = 2, lwd = 2)
+stages <- unique(data$FIGO_collapsed)
+for (i in 1:length(stages)) {
+  stage <- stages[i]
+  surv_fit <- survfit(newCoxMod, newdata = newdata %>% filter(FIGO_collapsed == stage))
+  H_t <- -log(surv_fit$surv)
+  lines(log(H_t) ~ surv_fit$time, col = mypal[i])
+}
+legend("bottomright", lty = 1, lwd = 2, col = mypal, bty = "n",
+       legend = levels(data$FIGO_collapsed))
+
+
+

@@ -25,8 +25,12 @@ table1 <- (data[,c(vars, "Vital status")] %>% tbl_summary(by = `Vital status`)
            %>% modify_header(label = "**Variable**") %>% bold_labels() 
            %>% add_overall())
 
-table1
+print(table1)
+
+CreateTableOne(vars, strata = "Vital status", data, factorVars = factorVars, addOverall = TRUE)
 
 
-
+####
+dat0 <- read.csv("data/survProjData.csv")
+table(dat0$primary_diagnosis.diagnoses)
 

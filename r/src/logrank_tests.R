@@ -11,10 +11,11 @@ data <- (read.csv("data/survDataCleaned.csv")
          %>% mutate(time_to_death_years = time / 365,
                     race = factor(race_cleaned), 
                     FIGO = factor(FIGO)))
+data$race <- relevel(data$race, ref = "white")
 head(data)
 
 ###### Compare survival by FIGO stage
-par(mfrow=c(1,2))
+par(mfrow=c(1,1))
 fit <- survfit(Surv(time/365, delta) ~ FIGO, data = data, conf.type = 'none')
 plot(fit, col = mypal, xlab = "Time (years)", ylab = "S(t)", cex.lab = 1.2)
 legend("bottomleft", col = mypal, lty = 1, lwd = 2, 
@@ -26,7 +27,7 @@ tbl <- data.frame(attr(logranks, "tft")$tft)
 tbl <- tbl[,c(1,2,6,8)]
 colnames(tbl) <- c("Test", "Z(t)", "Chi-square", "p-value")
 tbl[,-1] <- round(tbl[,-1], 2)
-tbl<- cbind(" " = c("Log-rank", "Gehan", "Tarone-Ware", "Peto-Peto", 
+tbl<- cbind("FIGO Status" = c("Log-rank", "Gehan", "Tarone-Ware", "Peto-Peto", 
                     "Modified PP","FH p=1,q=0", "FH p=0,q=1"), tbl[,-1])
 gt(tbl) %>% tab_style(
   style = cell_text(weight = "bold"),  
@@ -49,8 +50,9 @@ tbl <- data.frame(attr(logranks, "tft")$tft)
 tbl <- tbl[,c(1,2,6,8)]
 colnames(tbl) <- c("Test", "Z(t)", "Chi-square", "p-value")
 tbl[,-1] <- round(tbl[,-1], 2)
-tbl<- cbind(" " = c("Log-rank", "Gehan", "Tarone-Ware", "Peto-Peto", 
+tbl<- cbind("Race" = c("Log-rank", "Gehan", "Tarone-Ware", "Peto-Peto", 
               "Modified PP","FH p=1,q=0", "FH p=0,q=1"), tbl[,-1])
+
 gt(tbl) %>% tab_style(
   style = cell_text(weight = "bold"),  
   locations = cells_column_labels()) %>% tab_style(
