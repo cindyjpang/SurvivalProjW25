@@ -1,0 +1,308 @@
+---
+title: "Prediction"
+author: "Jonathan Hori"
+date: "2025-03-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(riskRegression)
+```
+
+
+## Train test split
+
+```{r}
+data.raceCleaned <- data.raceCleaned |> 
+  mutate(id = 1:n())
+
+
+data.raceCleaned |> #dplyr::select(delta, time) |> 
+  group_by(delta) |> 
+  summarise(mean(time) / 365,
+            max(time) / 365,
+            min(time) / 365)
+
+train_prop = 0.75
+
+train.ix <- data.raceCleaned |> 
+  group_by(delta) |> 
+  sample_frac(train_prop) |> 
+  dplyr::select(id) |> 
+  pull()
+
+
+train_data <- data.raceCleaned |> 
+  filter(id %in% train.ix) 
+test_data <- data.raceCleaned |> 
+  filter(!(id %in% train.ix))
+  
+```
+
+
+## Fit models
+Use features selected during earlier model selection
+```{r}
+fit.cox <- coxph(Surv(time, delta) ~ factor(race_cleaned) + factor(FIGO)+age_at_diagnosis, 
+                 data=train_data, ties = "breslow",
+                 x = TRUE, y = TRUE)
+fit.exp <- survreg(Surv(time, delta) ~ size.intermediate + factor(race_cleaned) + 
+                         factor(FIGO) + age_at_diagnosis, 
+                   data = train_data, dist = "exponential",
+                   x = TRUE, y = TRUE)
+fit.weibull <- survreg(Surv(time, delta) ~ size.intermediate + factor(race_cleaned) + 
+                             factor(FIGO) + age_at_diagnosis, 
+                       data = train_data, dist = "weibull",
+                       x = TRUE, y = TRUE)
+fit.loglogistic <- survreg(Surv(time, delta) ~ factor(race_cleaned) + 
+                                 factor(FIGO) + age_at_diagnosis, 
+                           data = train_data, dist = "loglogistic",
+                           x = TRUE, y = TRUE)
+fit.lognormal <- survreg(Surv(time, delta) ~ factor(race_cleaned) + 
+                               factor(FIGO) + age_at_diagnosis, 
+                         data = train_data, dist = "lognormal",
+                         x = TRUE, y = TRUE)
+```
+
+
+## Predict
+
+Cox model
+```{r}
+# Cox
+s <- survfit(fit.cox, newdata = test_data) 
+# p <- predict(fit.cox, newdata = test_data, type = "survival")
+# 
+# p
+# 
+# survfit(fit.cox, newdata = test_data) 
+# 
+# predict(s)
+# 
+# plot(s)
+
+preds_5y <- s$surv |> bind_cols() |> 
+  bind_cols(time = s$time) |> 
+  filter(time <= 5 * 365) |> 
+  slice_tail(n = 1) |> 
+  dplyr::select(-time) |> 
+  t()
+preds_10y <- s$surv |> bind_cols() |> 
+  bind_cols(time = s$time) |> 
+  filter(time <= 10 * 365) |> 
+  slice_tail(n = 1) |> 
+  dplyr::select(-time) |> 
+  t()
+
+survpreds_cox <- bind_cols(delta = test_data$delta,
+          time = test_data$time,
+          pred_5y = preds_5y,
+          pred_10y = preds_10y
+          )
+
+# pam.coxph(fit.cox)
+```
+
+AFT models
+```{r}
+# # Exp AFT
+# predictSurvProb(fit.exp, newdata = test_data)
+# test_data
+# 
+# predict(fit.exp, newdata = test_data, 
+#         type = "response")#,
+#         # p = seq(0.01, 0.99, 0.01))
+# 
+# library(SurvMetrics)
+# 
+# predictSurvProb2survreg
+# 
+# survfit(fit.exp)
+# 
+# pam.survreg(fit.weibull
+#             )
+# 
+# predictSurvProb.survreg
+predictSurvProb.survreg <- function(obj, newdata, time_days) {
+  # https://rdrr.io/cran/SurvMetrics/src/R/predictSurvProb2survreg.R
+  
+  lp <- predict(obj, newdata = newdata, type = "link") # vector
+  B <- obj$scale # fixed value
+  dist <- obj$dist
+  surv_fun <- function(lp_i) {
+    if (dist %in% c("weibull", "exponential")) {
+      exp(-exp((log(time_days) - lp_i) / B))
+    } else if (dist == "lognormal") {
+      1 - pnorm((log(time_days) - lp_i) / B, mean = 0, sd = 1)
+    } else if (dist == "gaussian") {
+      1 - pnorm((time_days - lp_i) / B, mean = 0, sd = 1)
+    } else if (dist == "logistic") {
+      1 / (1 + exp((time_days - lp_i) / B))
+    } else if (dist == "loglogistic") {
+      1 / (1 + exp((log(time_days) - lp_i) / B))
+    } else {
+      stop("This distribution is not supported")
+    }
+  }
+  # sp <- if(length(lp)==1) surv_fun(lp) else t(sapply(lp, surv_fun))
+  sp <- t(sapply(lp, surv_fun))
+}
+```
+
+Exponential
+```{r}
+pexp <- predictSurvProb.survreg(fit.exp, newdata = test_data, 
+                                time_days = c(5 * 365, 10 * 365))
+
+
+survpreds_exp <- bind_cols(delta = test_data$delta,
+          time = test_data$time,
+          pred_5y = pexp[, 1],
+          pred_10y = pexp[, 2]
+          )
+```
+
+
+Weibull
+```{r}
+pweib <- predictSurvProb.survreg(fit.weibull, newdata = test_data, 
+                                time_days = c(5 * 365, 10 * 365))
+
+
+survpreds_weibull <- bind_cols(delta = test_data$delta,
+          time = test_data$time,
+          pred_5y = pweib[, 1],
+          pred_10y = pweib[, 2]
+          )
+```
+
+Weibull
+```{r}
+pweib <- predictSurvProb.survreg(fit.weibull, newdata = test_data, 
+                                time_days = c(5 * 365, 10 * 365))
+
+
+survpreds_weibull <- bind_cols(delta = test_data$delta,
+          time = test_data$time,
+          pred_5y = pweib[, 1],
+          pred_10y = pweib[, 2]
+          )
+```
+
+Log-logistic
+```{r}
+ploglogist <- predictSurvProb.survreg(fit.loglogistic, newdata = test_data, 
+                                time_days = c(5 * 365, 10 * 365))
+
+
+survpreds_loglogistic <- bind_cols(delta = test_data$delta,
+          time = test_data$time,
+          pred_5y = ploglogist[, 1],
+          pred_10y = ploglogist[, 2]
+          )
+```
+
+Log-normal
+```{r}
+plognormal <- predictSurvProb.survreg(fit.lognormal, newdata = test_data, 
+                                time_days = c(5 * 365, 10 * 365))
+
+
+survpreds_lognormal <- bind_cols(delta = test_data$delta,
+          time = test_data$time,
+          pred_5y = plognormal[, 1],
+          pred_10y = plognormal[, 2]
+          )
+```
+
+## Evaluate
+
+```{r}
+score_5y <- Score(
+  list(
+    "Cox" = 1 - survpreds_cox$pred_5y[, 1],
+    "Exponential" = 1 - survpreds_exp$pred_5y,
+    "Weibull" = 1 - survpreds_weibull$pred_5y,
+    "Log-logistic" = 1 - survpreds_loglogistic$pred_5y,
+    "Log-normal" = 1 - survpreds_lognormal$pred_5y
+  ),
+  formula = Surv(time, delta) ~ 1,
+  data = test_data,
+  metrics = c("AUC", "Brier"),
+  plots = "Calibration",
+  times = c(5 * 365)
+)
+
+score_10y <- Score(
+  list(
+    "Cox" = 1 - survpreds_cox$pred_10y[, 1],
+    "Exponential" = 1 - survpreds_exp$pred_10y,
+    "Weibull" = 1 - survpreds_weibull$pred_10y,
+    "Log-logistic" = 1 - survpreds_loglogistic$pred_10y,
+    "Log-normal" = 1 - survpreds_lognormal$pred_10y
+  ),
+  formula = Surv(time, delta) ~ 1,
+  data = test_data,
+  metrics = c("AUC", "Brier"),
+  plots = "Calibration",
+  times = c(10 * 365)
+)
+
+summary(score_5y)$score |> 
+  filter(Model != "Null model") |> 
+  bind_rows(
+    summary(score_10y)$score |> 
+      filter(Model != "Null model")
+  ) |> 
+  mutate(times = c(rep("5y", 5), rep("10y", 5))) |> 
+  arrange(Model, desc(times)) |> 
+  kbl() |> 
+  kable_classic()
+  
+  
+
+
+```
+
+
+```{r}
+
+library(pec)
+
+pam.coxph(fit.cox = fit.cox)
+
+score.5y <- Score(
+  list("cox" = fit.cox),
+  # list(
+  #   pred_5y = preds_5y
+  #   # pred_10y = preds_10y,
+  # ),
+  formula = Surv(time, delta) ~ 1,
+  data = test_data,
+  metrics = c("AUC", "Brier"),
+  plots = "Calibration",
+  times = c(5 * 365, 10 * 365)
+)
+
+
+score.5y <- Score(
+  # list("cox" = fit.cox),
+  list(
+    pred_5y = 1 - preds_5y
+    # pred_10y = preds_10y,
+  ),
+  formula = Surv(time, delta) ~ 1,
+  data = test_data,
+  metrics = c("AUC", "Brier"),
+  plots = "Calibration",
+  times = c(5 * 365)
+)
+
+# test_data
+summary(score.5y)
+```
+
