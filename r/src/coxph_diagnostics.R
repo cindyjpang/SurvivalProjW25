@@ -15,13 +15,15 @@ data$race_cleaned <- relevel(data$race_cleaned, ref = "white")
 data$FIGO <- relevel(data$FIGO, ref = "Stage I")
 
 fullCoxMod <- coxph(Surv(time, delta) ~ size.intermediate + factor(race_cleaned) 
-                    + factor(FIGO)+age_at_diagnosis, data=data, ties = "breslow")
+                    + factor(FIGO)+age_at_diagnosis,
+                    data=data, ties = "breslow")
 
 summary(fullCoxMod)
 
 ############# First test continuous variables using Schoenfeld residuals
 # Test the proportional hazards assumption
 schoenfeld_test <- cox.zph(fullCoxMod)
+print(schoenfeld_test)
 
 par(mfrow=c(1,2))
 plot(schoenfeld_test, var = "age_at_diagnosis", 
@@ -29,6 +31,8 @@ plot(schoenfeld_test, var = "age_at_diagnosis",
 
 plot(schoenfeld_test, var = "size.intermediate", 
      main = "Schoenfeld plot for biopsy size")
+
+
 
 ############# Andersen plot for factors
 reptime <- function(l, t){
@@ -86,7 +90,6 @@ legend("topleft", col = mypal, lty = 1, lwd = 2, bty = "n", cex=1.2,
 
 
 ########## Plot log H vs t
-
 ## Race
 coxMod_race <- coxph(Surv(time, delta) ~ size.intermediate + factor(FIGO)
                      + age_at_diagnosis + strata(race_cleaned), data=data, ties = "breslow")
@@ -127,20 +130,88 @@ lines(log(fit2$hazard[fit2$strata == "Stage IV"]) ~ fit2$time[fit2$strata == "St
 legend("bottomright", lty = 1, lwd = 2, col = mypal, bty = "n",
        legend = levels(data$FIGO))
 
+################################################################################################
+############ Fixing the problems
+
+### FIGO stage
+data$FIGO_collapsed <- ifelse(data$FIGO %in% c("Stage I", "Stage II"), "Stage I/II", 
+                              ifelse(data$FIGO == "Stage III", "Stage III", "Stage IV"))
+data$FIGO_collapsed <- relevel(as.factor(data$FIGO_collapsed), ref = "Stage I/II")
+table(data$FIGO_collapsed)
+
+coxMod_figo2 <- coxph(Surv(time, delta) ~ size.intermediate + factor(race_cleaned)
+                     + age_at_diagnosis + strata(FIGO_collapsed), data=data, ties = "breslow")
+fit2 <- basehaz(coxMod_figo2)
+
+plot(log(fit2$hazard[fit2$strata == "Stage I/II"]) ~ fit2$time[fit2$strata == "Stage I/II"], 
+     col = mypal[1], type = 'l', ylim = c(-5, 2),
+     main = 'Log Cumulative Hazard, FIGO stage', ylab = 'log H(t)', xlab = 'time')
+lines(log(fit2$hazard[fit2$strata == "Stage III"]) ~ fit2$time[fit2$strata == "Stage III"], 
+      col = mypal[2])
+lines(log(fit2$hazard[fit2$strata == "Stage IV"]) ~ fit2$time[fit2$strata == "Stage IV"], 
+      col = mypal[3])
+legend("bottomright", lty = 1, lwd = 2, col = mypal, bty = "n",
+       legend = levels(data$FIGO_collapsed))
 
 
+##### Age at diagnosis
+
+# choose breakpoint that maximizes the likelihood
+event.times <- sort(unique(data$time[data$delta == 1]))
+loglik <- c()
+for(bb in event.times) {
+  data2 <- survSplit(Surv(time, delta) ~ size.intermediate + factor(race_cleaned) + factor(FIGO_collapsed) + age_at_diagnosis,
+                     data = data, cut = c(bb), episode = "tgroup")
+  colnames(data2) <- gsub("factor", "", colnames(data2))
+  colnames(data2) <- gsub("[()]", "", colnames(data2))
+  
+  fit <- coxph(Surv(time, delta) ~ size.intermediate + factor(race_cleaned) 
+                     + factor(FIGO_collapsed) + age_at_diagnosis +age_at_diagnosis:strata(tgroup),
+                     data=data2, ties = "breslow") 
+  loglik <- c(loglik, fit$loglik[2])
+}
+opt_tau <- event.times[which.max(loglik)]
+opt_tau
+
+# Use opt_tau
+data2 <- survSplit(Surv(time, delta) ~ size.intermediate + factor(race_cleaned) + factor(FIGO_collapsed) + age_at_diagnosis,
+                   data = data, cut = c(opt_tau), episode = "tgroup")
+colnames(data2) <- gsub("factor", "", colnames(data2))
+colnames(data2) <- gsub("[()]", "", colnames(data2))
+
+newCoxMod <- coxph(Surv(time, delta) ~ size.intermediate + factor(race_cleaned) 
+                   + factor(FIGO_collapsed) + age_at_diagnosis +age_at_diagnosis:strata(tgroup),
+                   data=data2, ties = "breslow") 
+cox.zph(newCoxMod)
+
+####### Race
+data$race_collapsed <- ifelse(data$race_cleaned %in% c("white", "black", "asian"), data$race_cleaned, "Unreported/other")
+data2 <- survSplit(Surv(time, delta) ~ size.intermediate + factor(race_collapsed) + factor(FIGO_collapsed) + age_at_diagnosis,
+                   data = data, cut = c(opt_tau), episode = "tgroup")
+colnames(data2) <- gsub("factor", "", colnames(data2))
+colnames(data2) <- gsub("[()]", "", colnames(data2))
+newCoxMod <- coxph(Surv(time, delta) ~ size.intermediate + factor(race_collapsed) 
+                   + factor(FIGO_collapsed) + age_at_diagnosis +age_at_diagnosis:strata(tgroup),
+                   data=data2, ties = "breslow") 
+cox.zph(newCoxMod)
 
 
+#################
+### Corrected final model
+data$FIGO_collapsed <- ifelse(data$FIGO %in% c("Stage I", "Stage II"), "Stage I/II", 
+                              ifelse(data$FIGO == "Stage III", "Stage III", "Stage IV"))
+data$FIGO_collapsed <- relevel(as.factor(data$FIGO_collapsed), ref = "Stage I/II")
 
+data$race_collapsed <- ifelse(data$race_cleaned %in% c("white", "black", "asian"), data$race_cleaned, "Unreported/other")
 
+data2 <- survSplit(Surv(time, delta) ~ size.intermediate + factor(race_collapsed) + factor(FIGO_collapsed) + age_at_diagnosis,
+                   data = data, cut = c(opt_tau), episode = "tgroup")
+colnames(data2) <- gsub("factor", "", colnames(data2))
+colnames(data2) <- gsub("[()]", "", colnames(data2))
 
+newCoxMod <- coxph(Surv(time, delta) ~ size.intermediate + factor(race_collapsed) 
+                   + factor(FIGO_collapsed) + age_at_diagnosis +age_at_diagnosis:strata(tgroup),
+                   data=data2, ties = "breslow") 
+summary(newCoxMod)
 
-
-
-
-
-
-
-
-
-
+cox.zph(newCoxMod)
