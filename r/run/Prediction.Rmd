@@ -252,6 +252,23 @@ score_10y <- Score(
   times = c(10 * 365)
 )
 
+
+cindex <- lapply(list(
+  "Cox" = fit.cox,
+  "Exponential" = fit.exp,
+  "Weibull" = fit.weibull,
+  "Log-logistic" = fit.loglogistic,
+  "Log-normal" = fit.lognormal
+),
+function(mod) {concordance(mod)$concordance |> round(3)}
+)
+# cindex |> bind_rows() |> t() |> as_tibble() |> mutate(model = names(cindex)) |> rename(C = V1)
+# concordance(fit.exp)$concordance
+# concordance(fit.cox)$concordance
+```
+
+Export table
+```{r}
 summary(score_5y)$score |> 
   filter(Model != "Null model") |> 
   bind_rows(
@@ -260,11 +277,13 @@ summary(score_5y)$score |>
   ) |> 
   mutate(times = c(rep("5y", 5), rep("10y", 5))) |> 
   arrange(Model, desc(times)) |> 
+  left_join(
+    cindex |> bind_rows() |> t() |> as_tibble() |> mutate(Model = names(cindex)) |> rename(C = V1),
+    by = "Model"
+  ) |> 
   kbl() |> 
-  kable_classic()
+  kable_classic(html_font = "Cambria")
   
-  
-
 
 ```
 
